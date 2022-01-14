@@ -1,0 +1,62 @@
+PACKAGES = $PACKAGES
+FORCE_EXC_HOOK = $FORCE_EXC_HOOK
+DEFAULT_PACKAGE = $DEFAULT_PACKAGE
+IMPORTER_CODE = $IMPORTER
+MODULE_NAME = "bund_loader"
+
+
+import types
+import sys
+import os
+
+
+def prepare():
+    module_name = MODULE_NAME
+
+    module = sys.modules.get(module_name)
+    if not module:
+        module = types.ModuleType(module_name)
+        module.__package__ = ""
+        module.__file__ = module_name + ".py"
+        exec(IMPORTER_CODE, module.__dict__)
+        sys.modules[module_name] = module
+
+    filename = os.path.splitext(__file__)[0] + ".py"
+
+    for finder in sys.meta_path:
+        if (isinstance(finder, module.Importer) and
+                finder.data == PACKAGES):
+            importer = finder
+    else:
+        if FORCE_EXC_HOOK is None:
+            set_excepthook = sys.__excepthook__ == sys.excepthook
+        else:
+            set_excepthook = FORCE_EXC_HOOK
+
+        importer = module.Importer(PACKAGES, filename,
+                                          set_excepthook)
+        sys.meta_path.append(importer)
+
+    if not DEFAULT_PACKAGE:
+        return
+
+    __, code, _ = PACKAGES[DEFAULT_PACKAGE]
+
+    def_package = DEFAULT_PACKAGE
+    name = __name__
+    filename = def_package + "/__init__.py"
+    compiled_code = compile(code, filename, "exec")
+
+    if name != "__main__":
+        globals()["__path__"] = [def_package]
+    else:
+        def_package = None
+    globals().update(__file__=filename,
+                     __package__=def_package,
+                     __name__=name,
+                     __loader__=importer)
+
+    exec(compiled_code, globals())
+
+
+prepare()
